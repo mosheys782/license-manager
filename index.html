@@ -35,6 +35,10 @@
       redirectUri: 'https://licenses.gibusa.com/'
     };
 
+    // Company Logos (will be loaded from GitHub)
+    const LOGO_FULL = 'GIB_logo_full_blue.png';
+    const LOGO_ICON = 'GIB_icon_light.png';
+
     // MSAL Configuration
     const msalConfig = {
       auth: {
@@ -889,7 +893,7 @@
     const LoginScreen = ({ onLogin, loading }) => {
       return React.createElement('div', { style: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' } },
         React.createElement('div', { style: { background: 'white', padding: '48px', borderRadius: '16px', textAlign: 'center', maxWidth: '400px', width: '100%', margin: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' } },
-          React.createElement('div', { style: { fontSize: '48px', marginBottom: '16px' } }, '🛡️'),
+          React.createElement('img', { src: LOGO_FULL, alt: 'Gancfried Insurance', style: { width: '200px', marginBottom: '24px' } }),
           React.createElement('h1', { style: { margin: '0 0 8px', fontSize: '24px', color: '#111827' } }, 'Producer License Manager'),
           React.createElement('p', { style: { margin: '0 0 32px', color: '#6b7280' } }, 'Sign in with your Microsoft account to continue'),
           React.createElement('button', {
@@ -1119,7 +1123,10 @@
         // Header
         React.createElement('header', { style: { background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: 'white', padding: '24px 32px', borderRadius: '12px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' } },
           React.createElement('div', null,
-            React.createElement('h1', { style: { margin: 0, fontSize: '24px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px' } }, '🛡️ Producer License Manager'),
+            React.createElement('h1', { style: { margin: 0, fontSize: '24px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px' } }, 
+              React.createElement('img', { src: LOGO_ICON, alt: 'GIB', style: { height: '36px' } }),
+              'Producer License Manager'
+            ),
             React.createElement('p', { style: { margin: '4px 0 0', opacity: 0.9, fontSize: '14px' } }, 'Track and manage individual & business entity licenses')
           ),
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '16px' } },
