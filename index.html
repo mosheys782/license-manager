@@ -76,14 +76,18 @@
 
     // ============ UTILITY FUNCTIONS ============
     const calculateDaysUntilExpiration = (expirationDate) => {
+      if (!expirationDate) return null; // No expiration
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const expDate = new Date(expirationDate);
+      // Parse date parts to avoid timezone issues
+      const parts = expirationDate.split('T')[0].split('-');
+      const expDate = new Date(parts[0], parts[1] - 1, parts[2]);
       expDate.setHours(0, 0, 0, 0);
       return Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
     };
 
-    const getStatus = (expirationDate) => {
+    const getStatus = (expirationDate, noExpiration) => {
+      if (noExpiration || !expirationDate) return 'active'; // No expiration = always active
       const days = calculateDaysUntilExpiration(expirationDate);
       if (days < 0) return 'expired';
       if (days <= 30) return 'expiring';
@@ -92,13 +96,16 @@
 
     const formatDate = (dateString) => {
       if (!dateString) return '';
-      return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      // Parse date parts to avoid timezone issues
+      const parts = dateString.split('T')[0].split('-');
+      const date = new Date(parts[0], parts[1] - 1, parts[2]);
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     };
 
     const formatDateForInput = (dateString) => {
       if (!dateString) return '';
-      const date = new Date(dateString);
-      return date.toISOString().split('T')[0];
+      // Just extract the date part (YYYY-MM-DD) without timezone conversion
+      return dateString.split('T')[0];
     };
 
     // ============ SHAREPOINT SERVICE ============
@@ -286,6 +293,7 @@
           licenseNumber: item.fields.LicenseNumber || '',
           effectiveDate: item.fields.EffectiveDate ? formatDateForInput(item.fields.EffectiveDate) : '',
           expirationDate: item.fields.ExpirationDate ? formatDateForInput(item.fields.ExpirationDate) : '',
+          noExpiration: !item.fields.ExpirationDate,
           emailReminders: item.fields.EmailReminders !== false,
           notRenewing: item.fields.Renewed || false,
           notes: item.fields.Notes || '',
@@ -500,7 +508,7 @@
     // ============ LICENSE FORM ============
     const LicenseForm = ({ license, onSave, onCancel, saving }) => {
       const getInitialForm = () => {
-        if (license) return license;
+        if (license) return { ...license, noExpiration: license.noExpiration || !license.expirationDate };
         return {
           type: 'individual',
           name: DEFAULTS.individual.name,
@@ -511,6 +519,7 @@
           licenseNumber: '',
           effectiveDate: '',
           expirationDate: '',
+          noExpiration: false,
           emailReminders: true,
           notRenewing: false,
           notes: '',
@@ -586,11 +595,17 @@
       };
 
       const handleSubmit = () => {
-        if (!form.name || !form.state || !form.licenseType || !form.licenseNumber || !form.expirationDate) {
+        const needsExpiration = !form.noExpiration;
+        if (!form.name || !form.state || !form.licenseType || !form.licenseNumber || (needsExpiration && !form.expirationDate)) {
           alert('Please fill in all required fields');
           return;
         }
-        onSave(form);
+        // Clear expiration date if noExpiration is checked
+        const submitData = { ...form };
+        if (form.noExpiration) {
+          submitData.expirationDate = '';
+        }
+        onSave(submitData);
       };
 
       return React.createElement('div', null,
@@ -627,7 +642,13 @@
           ),
           React.createElement(FormInput, { label: 'License Number', required: true, value: form.licenseNumber, onChange: (v) => updateField('licenseNumber', v), placeholder: 'CA-LH-2024-001' }),
           React.createElement(FormInput, { label: 'Effective Date', type: 'date', value: form.effectiveDate, onChange: (v) => updateField('effectiveDate', v) }),
-          React.createElement(FormInput, { label: 'Expiration Date', required: true, type: 'date', value: form.expirationDate, onChange: (v) => updateField('expirationDate', v) })
+          React.createElement('div', null,
+            React.createElement(FormInput, { label: 'Expiration Date', required: !form.noExpiration, type: 'date', value: form.expirationDate, onChange: (v) => updateField('expirationDate', v) }),
+            React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', cursor: 'pointer', fontSize: '14px', color: '#374151' } },
+              React.createElement('input', { type: 'checkbox', checked: form.noExpiration, onChange: (e) => { updateField('noExpiration', e.target.checked); if (e.target.checked) updateField('expirationDate', ''); }, style: { width: '16px', height: '16px', accentColor: '#3b82f6' } }),
+              'No Expiration Date'
+            )
+          )
         ),
         
         // Document Upload Section
@@ -703,10 +724,15 @@
 
       const getEventsForDay = (date) => {
         if (!date) return [];
-        const dateStr = date.toISOString().split('T')[0];
+        // Format date as YYYY-MM-DD without timezone conversion
+        const pad = (n) => n.toString().padStart(2, '0');
+        const dateStr = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
         return licenses.filter(l => {
-          const expDate = new Date(l.expirationDate).toISOString().split('T')[0];
-          return expDate === dateStr;
+          // Skip licenses with no expiration date
+          if (!l.expirationDate || l.noExpiration) return false;
+          // Extract just the date part from expirationDate
+          const expDateStr = l.expirationDate.split('T')[0];
+          return expDateStr === dateStr;
         });
       };
 
@@ -1058,7 +1084,7 @@
         const headers = ['Type', 'Name', 'NPN/FEIN', 'State', 'License Type', 'License #', 'Effective', 'Expires', 'Status'];
         const rows = filteredLicenses.map(l => [
           l.type, l.name, l.type === 'individual' ? l.npn : l.fein, l.state, l.licenseType,
-          l.licenseNumber, l.effectiveDate, l.expirationDate, l.notRenewing ? 'Not Renewing' : getStatus(l.expirationDate)
+          l.licenseNumber, l.effectiveDate, l.noExpiration ? 'No Expiration' : l.expirationDate, l.notRenewing ? 'Not Renewing' : getStatus(l.expirationDate, l.noExpiration)
         ]);
         const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
@@ -1071,9 +1097,9 @@
 
       // Calculate stats and filter licenses
       const stats = useMemo(() => {
-        const active = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate) === 'active').length;
-        const expiring = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate) === 'expiring').length;
-        const expired = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate) === 'expired').length;
+        const active = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate, l.noExpiration) === 'active').length;
+        const expiring = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate, l.noExpiration) === 'expiring').length;
+        const expired = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate, l.noExpiration) === 'expired').length;
         const notRenewing = licenses.filter(l => l.notRenewing).length;
         return { total: licenses.length, active, expiring, expired, notRenewing };
       }, [licenses]);
@@ -1086,7 +1112,7 @@
           if (statusFilter === 'notRenewing') {
             result = result.filter(l => l.notRenewing);
           } else {
-            result = result.filter(l => !l.notRenewing && getStatus(l.expirationDate) === statusFilter);
+            result = result.filter(l => !l.notRenewing && getStatus(l.expirationDate, l.noExpiration) === statusFilter);
           }
         }
         if (stateFilter !== 'all') result = result.filter(l => l.state === stateFilter);
@@ -1234,7 +1260,7 @@
                           )
                         )
                       : filteredLicenses.map((license, idx) => {
-                          const status = license.notRenewing ? 'notRenewing' : getStatus(license.expirationDate);
+                          const status = license.notRenewing ? 'notRenewing' : getStatus(license.expirationDate, license.noExpiration);
                           const daysLeft = calculateDaysUntilExpiration(license.expirationDate);
                           return React.createElement('tr', { key: license.id, style: { background: idx % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' } },
                             React.createElement('td', { style: { padding: '14px 16px' } },
@@ -1251,10 +1277,14 @@
                             React.createElement('td', { style: { padding: '14px 16px', fontSize: '13px', fontFamily: 'monospace' } }, license.licenseNumber),
                             React.createElement('td', { style: { padding: '14px 16px', fontSize: '13px' } }, formatDate(license.effectiveDate)),
                             React.createElement('td', { style: { padding: '14px 16px' } },
-                              React.createElement('div', { style: { fontSize: '13px' } }, formatDate(license.expirationDate)),
-                              !license.notRenewing && React.createElement('div', { style: { fontSize: '11px', color: daysLeft <= 0 ? '#dc2626' : daysLeft <= 30 ? '#d97706' : '#059669', fontWeight: '500' } },
-                                daysLeft <= 0 ? Math.abs(daysLeft) + ' days overdue' : daysLeft + ' days left'
-                              )
+                              license.noExpiration 
+                                ? React.createElement('div', { style: { fontSize: '13px', color: '#6b7280', fontStyle: 'italic' } }, 'No Expiration')
+                                : React.createElement(React.Fragment, null,
+                                    React.createElement('div', { style: { fontSize: '13px' } }, formatDate(license.expirationDate)),
+                                    !license.notRenewing && daysLeft !== null && React.createElement('div', { style: { fontSize: '11px', color: daysLeft <= 0 ? '#dc2626' : daysLeft <= 30 ? '#d97706' : '#059669', fontWeight: '500' } },
+                                      daysLeft <= 0 ? Math.abs(daysLeft) + ' days overdue' : daysLeft + ' days left'
+                                    )
+                                  )
                             ),
                             React.createElement('td', { style: { padding: '14px 16px' } }, React.createElement(StatusBadge, { status })),
                             React.createElement('td', { style: { padding: '14px 16px' } },
@@ -1277,7 +1307,7 @@
         stats.expiring > 0 && React.createElement('div', { style: { marginTop: '24px', background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '12px', padding: '20px 24px', border: '1px solid #f59e0b' } },
           React.createElement('h3', { style: { margin: '0 0 12px', fontSize: '16px', color: '#92400e' } }, '⚠️ Licenses Expiring Within 30 Days'),
           React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
-            licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate) === 'expiring').map(l =>
+            licenses.filter(l => !l.notRenewing && !l.noExpiration && getStatus(l.expirationDate, l.noExpiration) === 'expiring').map(l =>
               React.createElement('div', { key: l.id, style: { background: 'white', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' } },
                 l.type === 'individual' ? '👤' : '🏢',
                 React.createElement('strong', null, l.name),
