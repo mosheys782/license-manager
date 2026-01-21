@@ -287,7 +287,7 @@
           effectiveDate: item.fields.EffectiveDate ? formatDateForInput(item.fields.EffectiveDate) : '',
           expirationDate: item.fields.ExpirationDate ? formatDateForInput(item.fields.ExpirationDate) : '',
           emailReminders: item.fields.EmailReminders !== false,
-          renewed: item.fields.Renewed || false,
+          notRenewing: item.fields.Renewed || false,
           notes: item.fields.Notes || '',
           documents: item.fields.DocumentUrl ? [{ name: item.fields.DocumentName || 'License Document', url: item.fields.DocumentUrl }] : []
         }));
@@ -330,7 +330,7 @@
           EffectiveDate: license.effectiveDate || null,
           ExpirationDate: license.expirationDate || null,
           EmailReminders: license.emailReminders,
-          Renewed: license.renewed || false,
+          Renewed: license.notRenewing || false,
           Notes: license.notes || '',
           DocumentUrl: documentUrl,
           DocumentName: documentName
@@ -390,7 +390,7 @@
           EffectiveDate: license.effectiveDate || null,
           ExpirationDate: license.expirationDate || null,
           EmailReminders: license.emailReminders,
-          Renewed: license.renewed || false,
+          Renewed: license.notRenewing || false,
           Notes: license.notes || '',
           DocumentUrl: documentUrl,
           DocumentName: documentName
@@ -432,9 +432,9 @@
         active: { background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', color: 'white' },
         expiring: { background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)', color: 'white' },
         expired: { background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)', color: 'white' },
-        renewed: { background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', color: 'white' }
+        notRenewing: { background: 'linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)', color: 'white' }
       };
-      const labels = { active: 'Active', expiring: 'Expiring Soon', expired: 'Expired', renewed: 'Renewed' };
+      const labels = { active: 'Active', expiring: 'Expiring Soon', expired: 'Expired', notRenewing: 'Not Renewing' };
       return React.createElement('span', { style: { ...styles[status], padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'inline-block' } }, labels[status]);
     };
 
@@ -512,7 +512,7 @@
           effectiveDate: '',
           expirationDate: '',
           emailReminders: true,
-          renewed: false,
+          notRenewing: false,
           notes: '',
           documents: []
         };
@@ -742,7 +742,7 @@
                   key: event.id, 
                   style: { 
                     marginTop: '4px', padding: '2px 6px', 
-                    background: event.renewed ? '#dbeafe' : '#fef3c7', 
+                    background: event.notRenewing ? '#e5e7eb' : '#fef3c7', 
                     borderRadius: '4px', fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' 
                   } 
                 }, event.name)
@@ -752,7 +752,7 @@
         ),
         React.createElement('div', { style: { display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '16px', fontSize: '12px' } },
           React.createElement('span', { style: { color: '#f59e0b' } }, '🟡 Expiring'),
-          React.createElement('span', { style: { color: '#3b82f6' } }, '🔵 Renewed')
+          React.createElement('span', { style: { color: '#6b7280' } }, '⚫ Not Renewing')
         )
       );
     };
@@ -1023,12 +1023,12 @@
         }
       };
 
-      const handleMarkRenewed = async (id) => {
+      const handleMarkNotRenewing = async (id) => {
         const license = licenses.find(l => l.id === id);
         if (license) {
           try {
-            const updated = await spService.updateLicense({ ...license, renewed: true });
-            setLicenses(prev => prev.map(l => l.id === id ? { ...l, renewed: true } : l));
+            const updated = await spService.updateLicense({ ...license, notRenewing: true });
+            setLicenses(prev => prev.map(l => l.id === id ? { ...l, notRenewing: true } : l));
           } catch (err) {
             alert('Failed to update: ' + err.message);
           }
@@ -1046,7 +1046,7 @@
         const headers = ['Type', 'Name', 'NPN/FEIN', 'State', 'License Type', 'License #', 'Effective', 'Expires', 'Status'];
         const rows = filteredLicenses.map(l => [
           l.type, l.name, l.type === 'individual' ? l.npn : l.fein, l.state, l.licenseType,
-          l.licenseNumber, l.effectiveDate, l.expirationDate, l.renewed ? 'Renewed' : getStatus(l.expirationDate)
+          l.licenseNumber, l.effectiveDate, l.expirationDate, l.notRenewing ? 'Not Renewing' : getStatus(l.expirationDate)
         ]);
         const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
@@ -1059,11 +1059,11 @@
 
       // Calculate stats and filter licenses
       const stats = useMemo(() => {
-        const active = licenses.filter(l => !l.renewed && getStatus(l.expirationDate) === 'active').length;
-        const expiring = licenses.filter(l => !l.renewed && getStatus(l.expirationDate) === 'expiring').length;
-        const expired = licenses.filter(l => !l.renewed && getStatus(l.expirationDate) === 'expired').length;
-        const renewed = licenses.filter(l => l.renewed).length;
-        return { total: licenses.length, active, expiring, expired, renewed };
+        const active = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate) === 'active').length;
+        const expiring = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate) === 'expiring').length;
+        const expired = licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate) === 'expired').length;
+        const notRenewing = licenses.filter(l => l.notRenewing).length;
+        return { total: licenses.length, active, expiring, expired, notRenewing };
       }, [licenses]);
 
       const filteredLicenses = useMemo(() => {
@@ -1071,10 +1071,10 @@
         
         if (filter !== 'all') result = result.filter(l => l.type === filter);
         if (statusFilter !== 'all') {
-          if (statusFilter === 'renewed') {
-            result = result.filter(l => l.renewed);
+          if (statusFilter === 'notRenewing') {
+            result = result.filter(l => l.notRenewing);
           } else {
-            result = result.filter(l => !l.renewed && getStatus(l.expirationDate) === statusFilter);
+            result = result.filter(l => !l.notRenewing && getStatus(l.expirationDate) === statusFilter);
           }
         }
         if (stateFilter !== 'all') result = result.filter(l => l.state === stateFilter);
@@ -1149,7 +1149,7 @@
             { label: 'Active', value: stats.active, color: '#10b981', icon: '✅' },
             { label: 'Expiring', value: stats.expiring, color: '#f59e0b', icon: '⚠️' },
             { label: 'Expired', value: stats.expired, color: '#ef4444', icon: '❌' },
-            { label: 'Renewed', value: stats.renewed, color: '#3b82f6', icon: '🔄' }
+            { label: 'Not Renewing', value: stats.notRenewing, color: '#6b7280', icon: '🚫' }
           ].map(stat =>
             React.createElement('div', { key: stat.label, style: { background: 'white', borderRadius: '12px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderLeft: `4px solid ${stat.color}` } },
               React.createElement('div', null,
@@ -1177,7 +1177,7 @@
               React.createElement('option', { value: 'active' }, 'Active'),
               React.createElement('option', { value: 'expiring' }, 'Expiring'),
               React.createElement('option', { value: 'expired' }, 'Expired'),
-              React.createElement('option', { value: 'renewed' }, 'Renewed')
+              React.createElement('option', { value: 'notRenewing' }, 'Not Renewing')
             ),
             React.createElement('select', { value: stateFilter, onChange: (e) => setStateFilter(e.target.value), style: { padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' } },
               React.createElement('option', { value: 'all' }, 'All States'),
@@ -1222,7 +1222,7 @@
                           )
                         )
                       : filteredLicenses.map((license, idx) => {
-                          const status = license.renewed ? 'renewed' : getStatus(license.expirationDate);
+                          const status = license.notRenewing ? 'notRenewing' : getStatus(license.expirationDate);
                           const daysLeft = calculateDaysUntilExpiration(license.expirationDate);
                           return React.createElement('tr', { key: license.id, style: { background: idx % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' } },
                             React.createElement('td', { style: { padding: '14px 16px' } },
@@ -1240,7 +1240,7 @@
                             React.createElement('td', { style: { padding: '14px 16px', fontSize: '13px' } }, formatDate(license.effectiveDate)),
                             React.createElement('td', { style: { padding: '14px 16px' } },
                               React.createElement('div', { style: { fontSize: '13px' } }, formatDate(license.expirationDate)),
-                              !license.renewed && React.createElement('div', { style: { fontSize: '11px', color: daysLeft <= 0 ? '#dc2626' : daysLeft <= 30 ? '#d97706' : '#059669', fontWeight: '500' } },
+                              !license.notRenewing && React.createElement('div', { style: { fontSize: '11px', color: daysLeft <= 0 ? '#dc2626' : daysLeft <= 30 ? '#d97706' : '#059669', fontWeight: '500' } },
                                 daysLeft <= 0 ? Math.abs(daysLeft) + ' days overdue' : daysLeft + ' days left'
                               )
                             ),
@@ -1249,7 +1249,7 @@
                               React.createElement('div', { style: { display: 'flex', gap: '8px' } },
                                 license.documents && license.documents.length > 0 && React.createElement('button', { onClick: () => setPreviewDocument(license.documents[0]), title: 'View Document', style: { background: '#f3e8ff', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '📄'),
                                 React.createElement('button', { onClick: () => { setEditingLicense(license); setShowAddModal(true); }, title: 'Edit', style: { background: '#dbeafe', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '✏️'),
-                                !license.renewed && React.createElement('button', { onClick: () => handleMarkRenewed(license.id), title: 'Mark Renewed', style: { background: '#d1fae5', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '✅'),
+                                !license.notRenewing && React.createElement('button', { onClick: () => handleMarkNotRenewing(license.id), title: 'Mark Not Renewing', style: { background: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '🚫'),
                                 React.createElement('button', { onClick: () => handleDeleteLicense(license.id), title: 'Delete', style: { background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '🗑️')
                               )
                             )
@@ -1264,7 +1264,7 @@
         stats.expiring > 0 && React.createElement('div', { style: { marginTop: '24px', background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '12px', padding: '20px 24px', border: '1px solid #f59e0b' } },
           React.createElement('h3', { style: { margin: '0 0 12px', fontSize: '16px', color: '#92400e' } }, '⚠️ Licenses Expiring Within 30 Days'),
           React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
-            licenses.filter(l => !l.renewed && getStatus(l.expirationDate) === 'expiring').map(l =>
+            licenses.filter(l => !l.notRenewing && getStatus(l.expirationDate) === 'expiring').map(l =>
               React.createElement('div', { key: l.id, style: { background: 'white', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' } },
                 l.type === 'individual' ? '👤' : '🏢',
                 React.createElement('strong', null, l.name),
