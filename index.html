@@ -1199,6 +1199,21 @@
           )
         ),
 
+        // Expiring Alert (under stats cards)
+        stats.expiring > 0 && React.createElement('div', { style: { marginBottom: '24px', background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '12px', padding: '20px 24px', border: '1px solid #f59e0b' } },
+          React.createElement('h3', { style: { margin: '0 0 12px', fontSize: '16px', color: '#92400e' } }, '⚠️ Licenses Expiring Within 30 Days'),
+          React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
+            licenses.filter(l => !l.notRenewing && !l.noExpiration && getStatus(l.expirationDate, l.noExpiration) === 'expiring').map(l =>
+              React.createElement('div', { key: l.id, style: { background: 'white', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' } },
+                l.type === 'individual' ? '👤' : '🏢',
+                React.createElement('strong', null, l.name),
+                React.createElement('span', { style: { color: '#6b7280' } }, '(' + l.state + ')'),
+                React.createElement('span', { style: { color: '#d97706', fontWeight: '600' } }, calculateDaysUntilExpiration(l.expirationDate) + ' days')
+              )
+            )
+          )
+        ),
+
         // Filters
         React.createElement('div', { style: { background: 'white', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' } },
           React.createElement('div', { style: { display: 'flex', gap: '8px' } },
@@ -1301,21 +1316,6 @@
                   )
                 )
               )
-        ),
-
-        // Expiring Alert
-        stats.expiring > 0 && React.createElement('div', { style: { marginTop: '24px', background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '12px', padding: '20px 24px', border: '1px solid #f59e0b' } },
-          React.createElement('h3', { style: { margin: '0 0 12px', fontSize: '16px', color: '#92400e' } }, '⚠️ Licenses Expiring Within 30 Days'),
-          React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
-            licenses.filter(l => !l.notRenewing && !l.noExpiration && getStatus(l.expirationDate, l.noExpiration) === 'expiring').map(l =>
-              React.createElement('div', { key: l.id, style: { background: 'white', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' } },
-                l.type === 'individual' ? '👤' : '🏢',
-                React.createElement('strong', null, l.name),
-                React.createElement('span', { style: { color: '#6b7280' } }, '(' + l.state + ')'),
-                React.createElement('span', { style: { color: '#d97706', fontWeight: '600' } }, calculateDaysUntilExpiration(l.expirationDate) + ' days')
-              )
-            )
-          )
         ),
 
         // Add/Edit Modal
