@@ -1035,6 +1035,18 @@
         }
       };
 
+      const handleReactivate = async (id) => {
+        const license = licenses.find(l => l.id === id);
+        if (license) {
+          try {
+            const updated = await spService.updateLicense({ ...license, notRenewing: false });
+            setLicenses(prev => prev.map(l => l.id === id ? { ...l, notRenewing: false } : l));
+          } catch (err) {
+            alert('Failed to update: ' + err.message);
+          }
+        }
+      };
+
       const handleSort = (key) => {
         setSortConfig(prev => ({
           key,
@@ -1250,6 +1262,7 @@
                                 license.documents && license.documents.length > 0 && React.createElement('button', { onClick: () => setPreviewDocument(license.documents[0]), title: 'View Document', style: { background: '#f3e8ff', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '📄'),
                                 React.createElement('button', { onClick: () => { setEditingLicense(license); setShowAddModal(true); }, title: 'Edit', style: { background: '#dbeafe', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '✏️'),
                                 !license.notRenewing && React.createElement('button', { onClick: () => handleMarkNotRenewing(license.id), title: 'Mark Not Renewing', style: { background: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '🚫'),
+                                license.notRenewing && React.createElement('button', { onClick: () => handleReactivate(license.id), title: 'Reactivate License', style: { background: '#d1fae5', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '✅'),
                                 React.createElement('button', { onClick: () => handleDeleteLicense(license.id), title: 'Delete', style: { background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '🗑️')
                               )
                             )
