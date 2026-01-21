@@ -134,7 +134,9 @@
         
         if (!response.ok) {
           const error = await response.json().catch(() => ({}));
-          throw new Error(error.error?.message || `HTTP ${response.status}`);
+          console.error('SharePoint API Error:', error);
+          const errorMsg = error.error?.message || error.error?.code || `HTTP ${response.status}`;
+          throw new Error(errorMsg);
         }
         
         if (response.status === 204) return null;
@@ -178,7 +180,7 @@
           emailReminders: item.fields.EmailReminders !== false,
           renewed: item.fields.Renewed || false,
           notes: item.fields.Notes || '',
-          documents: item.fields.DocumentUrl ? [{ name: item.fields.DocumentName || 'Document', data: item.fields.DocumentUrl }] : []
+          documents: []
         }));
       }
 
@@ -187,29 +189,29 @@
           await this.initialize();
         }
 
+        const fields = {
+          Title: license.name,
+          ProducerName: license.name,
+          LicenseType: license.type,
+          NPN: license.npn || '',
+          FEIN: license.fein || '',
+          State: license.state,
+          LicenseCategory: license.licenseType,
+          LicenseNumber: license.licenseNumber,
+          EffectiveDate: license.effectiveDate || null,
+          ExpirationDate: license.expirationDate || null,
+          EmailReminders: license.emailReminders,
+          Renewed: license.renewed || false,
+          Notes: license.notes || ''
+        };
+        
+        console.log('Creating license with fields:', fields);
+
         const response = await this.graphRequest(
           `/sites/${this.siteId}/lists/${this.listId}/items`,
           {
             method: 'POST',
-            body: JSON.stringify({
-              fields: {
-                Title: license.name,
-                ProducerName: license.name,
-                LicenseType: license.type,
-                NPN: license.npn || '',
-                FEIN: license.fein || '',
-                State: license.state,
-                LicenseCategory: license.licenseType,
-                LicenseNumber: license.licenseNumber,
-                EffectiveDate: license.effectiveDate || null,
-                ExpirationDate: license.expirationDate || null,
-                EmailReminders: license.emailReminders,
-                Renewed: license.renewed || false,
-                Notes: license.notes || '',
-                DocumentUrl: license.documents && license.documents.length > 0 ? license.documents[0].data : '',
-                DocumentName: license.documents && license.documents.length > 0 ? license.documents[0].name : ''
-              }
-            })
+            body: JSON.stringify({ fields })
           }
         );
 
@@ -224,27 +226,29 @@
           await this.initialize();
         }
 
+        const fields = {
+          Title: license.name,
+          ProducerName: license.name,
+          LicenseType: license.type,
+          NPN: license.npn || '',
+          FEIN: license.fein || '',
+          State: license.state,
+          LicenseCategory: license.licenseType,
+          LicenseNumber: license.licenseNumber,
+          EffectiveDate: license.effectiveDate || null,
+          ExpirationDate: license.expirationDate || null,
+          EmailReminders: license.emailReminders,
+          Renewed: license.renewed || false,
+          Notes: license.notes || ''
+        };
+
+        console.log('Updating license with fields:', fields);
+
         await this.graphRequest(
           `/sites/${this.siteId}/lists/${this.listId}/items/${license.id}/fields`,
           {
             method: 'PATCH',
-            body: JSON.stringify({
-              Title: license.name,
-              ProducerName: license.name,
-              LicenseType: license.type,
-              NPN: license.npn || '',
-              FEIN: license.fein || '',
-              State: license.state,
-              LicenseCategory: license.licenseType,
-              LicenseNumber: license.licenseNumber,
-              EffectiveDate: license.effectiveDate || null,
-              ExpirationDate: license.expirationDate || null,
-              EmailReminders: license.emailReminders,
-              Renewed: license.renewed || false,
-              Notes: license.notes || '',
-              DocumentUrl: license.documents && license.documents.length > 0 ? license.documents[0].data : '',
-              DocumentName: license.documents && license.documents.length > 0 ? license.documents[0].name : ''
-            })
+            body: JSON.stringify(fields)
           }
         );
 
