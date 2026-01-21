@@ -166,19 +166,19 @@
 
         return response.value.map(item => ({
           id: item.id,
-          type: item.fields.LicenseEntityType || 'individual',
-          name: item.fields.Title || '',
+          type: item.fields.LicenseType || 'individual',
+          name: item.fields.ProducerName || item.fields.Title || '',
           npn: item.fields.NPN || '',
           fein: item.fields.FEIN || '',
           state: item.fields.State || '',
-          licenseType: item.fields.LicenseType || '',
+          licenseType: item.fields.LicenseCategory || '',
           licenseNumber: item.fields.LicenseNumber || '',
           effectiveDate: item.fields.EffectiveDate ? formatDateForInput(item.fields.EffectiveDate) : '',
           expirationDate: item.fields.ExpirationDate ? formatDateForInput(item.fields.ExpirationDate) : '',
           emailReminders: item.fields.EmailReminders !== false,
           renewed: item.fields.Renewed || false,
           notes: item.fields.Notes || '',
-          documents: []
+          documents: item.fields.DocumentUrl ? [{ name: item.fields.DocumentName || 'Document', data: item.fields.DocumentUrl }] : []
         }));
       }
 
@@ -194,17 +194,20 @@
             body: JSON.stringify({
               fields: {
                 Title: license.name,
-                LicenseEntityType: license.type,
+                ProducerName: license.name,
+                LicenseType: license.type,
                 NPN: license.npn || '',
                 FEIN: license.fein || '',
                 State: license.state,
-                LicenseType: license.licenseType,
+                LicenseCategory: license.licenseType,
                 LicenseNumber: license.licenseNumber,
                 EffectiveDate: license.effectiveDate || null,
                 ExpirationDate: license.expirationDate || null,
                 EmailReminders: license.emailReminders,
                 Renewed: license.renewed || false,
-                Notes: license.notes || ''
+                Notes: license.notes || '',
+                DocumentUrl: license.documents && license.documents.length > 0 ? license.documents[0].data : '',
+                DocumentName: license.documents && license.documents.length > 0 ? license.documents[0].name : ''
               }
             })
           }
@@ -227,17 +230,20 @@
             method: 'PATCH',
             body: JSON.stringify({
               Title: license.name,
-              LicenseEntityType: license.type,
+              ProducerName: license.name,
+              LicenseType: license.type,
               NPN: license.npn || '',
               FEIN: license.fein || '',
               State: license.state,
-              LicenseType: license.licenseType,
+              LicenseCategory: license.licenseType,
               LicenseNumber: license.licenseNumber,
               EffectiveDate: license.effectiveDate || null,
               ExpirationDate: license.expirationDate || null,
               EmailReminders: license.emailReminders,
               Renewed: license.renewed || false,
-              Notes: license.notes || ''
+              Notes: license.notes || '',
+              DocumentUrl: license.documents && license.documents.length > 0 ? license.documents[0].data : '',
+              DocumentName: license.documents && license.documents.length > 0 ? license.documents[0].name : ''
             })
           }
         );
@@ -383,7 +389,11 @@
       };
 
       const handleFileUpload = (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files ? e.target.files[0] : null;
+        processFile(file);
+      };
+
+      const processFile = (file) => {
         if (file && file.type === 'application/pdf') {
           const reader = new FileReader();
           reader.onload = (event) => {
@@ -396,6 +406,18 @@
         } else if (file) {
           alert('Please upload a PDF file');
         }
+      };
+
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const file = e.dataTransfer.files[0];
+        processFile(file);
       };
 
       const removeDocument = () => {
@@ -456,12 +478,17 @@
                 React.createElement('a', { href: form.documents[0].data, target: '_blank', download: form.documents[0].name, style: { flex: 1, color: '#3b82f6', textDecoration: 'none', fontWeight: '500' } }, form.documents[0].name),
                 React.createElement('button', { onClick: removeDocument, style: { background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', color: '#dc2626', fontWeight: '500' } }, '✕ Remove')
               )
-            : React.createElement('div', { style: { border: '2px dashed #d1d5db', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' } },
+            : React.createElement('div', { 
+                onDragOver: handleDragOver,
+                onDrop: handleDrop,
+                style: { border: '2px dashed #d1d5db', borderRadius: '12px', padding: '32px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s', background: '#fafafa' } 
+              },
                 React.createElement('input', { type: 'file', accept: '.pdf', onChange: handleFileUpload, style: { display: 'none' }, id: 'doc-upload' }),
-                React.createElement('label', { htmlFor: 'doc-upload', style: { cursor: 'pointer' } },
-                  React.createElement('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '📤'),
-                  React.createElement('span', { style: { color: '#3b82f6', fontWeight: '500' } }, 'Click to upload PDF'),
-                  React.createElement('p', { style: { margin: '8px 0 0', fontSize: '12px', color: '#6b7280' } }, 'PDF files only, max 10MB')
+                React.createElement('label', { htmlFor: 'doc-upload', style: { cursor: 'pointer', display: 'block' } },
+                  React.createElement('div', { style: { fontSize: '40px', marginBottom: '12px' } }, '📤'),
+                  React.createElement('div', { style: { color: '#3b82f6', fontWeight: '600', fontSize: '16px', marginBottom: '4px' } }, 'Drag & drop PDF here'),
+                  React.createElement('div', { style: { color: '#6b7280', fontSize: '14px' } }, 'or click to browse'),
+                  React.createElement('p', { style: { margin: '12px 0 0', fontSize: '12px', color: '#9ca3af' } }, 'PDF files only, max 10MB')
                 )
               )
         ),
