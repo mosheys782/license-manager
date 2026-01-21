@@ -31,6 +31,7 @@
       siteHostname: 'gancfried.sharepoint.com',
       sitePath: '/sites/GIBUSA',
       listName: 'ProducerLicenses',
+      documentLibrary: 'LicenseDocuments',
       redirectUri: 'https://licenses.gibusa.com/'
     };
 
@@ -101,6 +102,7 @@
       constructor() {
         this.siteId = null;
         this.listId = null;
+        this.driveId = null;
       }
 
       async getAccessToken() {
@@ -155,6 +157,67 @@
           throw new Error(`List "${CONFIG.listName}" not found`);
         }
         this.listId = listsResponse.value[0].id;
+
+        // Get drive ID for document library
+        try {
+          const drivesResponse = await this.graphRequest(`/sites/${this.siteId}/drives`);
+          const docLibDrive = drivesResponse.value.find(d => d.name === CONFIG.documentLibrary);
+          if (docLibDrive) {
+            this.driveId = docLibDrive.id;
+          }
+        } catch (err) {
+          console.warn('Could not find document library:', err);
+        }
+      }
+
+      // Upload document to SharePoint Document Library
+      async uploadDocument(fileName, base64Data) {
+        if (!this.siteId) {
+          await this.initialize();
+        }
+
+        if (!this.driveId) {
+          throw new Error(`Document library "${CONFIG.documentLibrary}" not found. Please create it in SharePoint.`);
+        }
+
+        // Convert base64 to binary
+        const base64Content = base64Data.split(',')[1]; // Remove data:application/pdf;base64, prefix
+        const binaryString = atob(base64Content);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        // Generate unique filename
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const uniqueFileName = `${timestamp}_${fileName}`;
+
+        // Upload file
+        const token = await this.getAccessToken();
+        const uploadResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/drives/${this.driveId}/root:/${uniqueFileName}:/content`,
+          {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/pdf'
+            },
+            body: bytes
+          }
+        );
+
+        if (!uploadResponse.ok) {
+          const error = await uploadResponse.json().catch(() => ({}));
+          throw new Error(error.error?.message || 'Failed to upload document');
+        }
+
+        const fileData = await uploadResponse.json();
+        
+        // Return the web URL for viewing
+        return {
+          url: fileData.webUrl,
+          name: uniqueFileName
+        };
       }
 
       async getLicenses() {
@@ -180,13 +243,33 @@
           emailReminders: item.fields.EmailReminders !== false,
           renewed: item.fields.Renewed || false,
           notes: item.fields.Notes || '',
-          documents: []
+          documents: item.fields.DocumentUrl ? [{ name: item.fields.DocumentName || 'License Document', url: item.fields.DocumentUrl }] : []
         }));
       }
 
       async createLicense(license) {
         if (!this.siteId || !this.listId) {
           await this.initialize();
+        }
+
+        // Upload document if present (check for base64 data)
+        let documentUrl = '';
+        let documentName = '';
+        
+        if (license.documents && license.documents.length > 0) {
+          const doc = license.documents[0];
+          // Check if it's base64 data (new upload) vs existing URL
+          if (doc.data && doc.data.startsWith('data:')) {
+            console.log('Uploading document to SharePoint...');
+            const uploadResult = await this.uploadDocument(doc.name, doc.data);
+            documentUrl = uploadResult.url;
+            documentName = uploadResult.name;
+            console.log('Document uploaded:', documentUrl);
+          } else if (doc.url) {
+            // Existing URL
+            documentUrl = doc.url;
+            documentName = doc.name;
+          }
         }
 
         const fields = {
@@ -202,7 +285,9 @@
           ExpirationDate: license.expirationDate || null,
           EmailReminders: license.emailReminders,
           Renewed: license.renewed || false,
-          Notes: license.notes || ''
+          Notes: license.notes || '',
+          DocumentUrl: documentUrl,
+          DocumentName: documentName
         };
         
         console.log('Creating license with fields:', fields);
@@ -217,13 +302,34 @@
 
         return {
           ...license,
-          id: response.id
+          id: response.id,
+          documents: documentUrl ? [{ name: documentName, url: documentUrl }] : []
         };
       }
 
       async updateLicense(license) {
         if (!this.siteId || !this.listId) {
           await this.initialize();
+        }
+
+        // Upload document if present (check for base64 data)
+        let documentUrl = '';
+        let documentName = '';
+        
+        if (license.documents && license.documents.length > 0) {
+          const doc = license.documents[0];
+          // Check if it's base64 data (new upload) vs existing URL
+          if (doc.data && doc.data.startsWith('data:')) {
+            console.log('Uploading document to SharePoint...');
+            const uploadResult = await this.uploadDocument(doc.name, doc.data);
+            documentUrl = uploadResult.url;
+            documentName = uploadResult.name;
+            console.log('Document uploaded:', documentUrl);
+          } else if (doc.url) {
+            // Existing URL
+            documentUrl = doc.url;
+            documentName = doc.name;
+          }
         }
 
         const fields = {
@@ -239,7 +345,9 @@
           ExpirationDate: license.expirationDate || null,
           EmailReminders: license.emailReminders,
           Renewed: license.renewed || false,
-          Notes: license.notes || ''
+          Notes: license.notes || '',
+          DocumentUrl: documentUrl,
+          DocumentName: documentName
         };
 
         console.log('Updating license with fields:', fields);
@@ -252,7 +360,10 @@
           }
         );
 
-        return license;
+        return {
+          ...license,
+          documents: documentUrl ? [{ name: documentName, url: documentUrl }] : []
+        };
       }
 
       async deleteLicense(id) {
@@ -479,7 +590,19 @@
           form.documents && form.documents.length > 0
             ? React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' } },
                 React.createElement('span', { style: { fontSize: '24px' } }, '📄'),
-                React.createElement('a', { href: form.documents[0].data, target: '_blank', download: form.documents[0].name, style: { flex: 1, color: '#3b82f6', textDecoration: 'none', fontWeight: '500' } }, form.documents[0].name),
+                React.createElement('a', { 
+                  href: form.documents[0].data || form.documents[0].url, 
+                  target: '_blank', 
+                  onClick: (e) => {
+                    // For SharePoint URLs, just open in new tab
+                    if (form.documents[0].url && !form.documents[0].data) {
+                      e.preventDefault();
+                      window.open(form.documents[0].url, '_blank');
+                    }
+                  },
+                  style: { flex: 1, color: '#3b82f6', textDecoration: 'none', fontWeight: '500' } 
+                }, form.documents[0].name),
+                form.documents[0].url && React.createElement('span', { style: { fontSize: '11px', color: '#10b981', background: '#d1fae5', padding: '2px 8px', borderRadius: '4px' } }, '✓ Saved'),
                 React.createElement('button', { onClick: removeDocument, style: { background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', color: '#dc2626', fontWeight: '500' } }, '✕ Remove')
               )
             : React.createElement('div', { 
@@ -588,6 +711,83 @@
       );
     };
 
+    // ============ PDF PREVIEW MODAL ============
+    const PdfPreviewModal = ({ isOpen, onClose, document }) => {
+      if (!isOpen || !document) return null;
+      
+      // Determine the source (base64 data or SharePoint URL)
+      const isBase64 = document.data && document.data.startsWith('data:');
+      const src = isBase64 ? document.data : document.url;
+      
+      const handleDownload = () => {
+        if (isBase64) {
+          const link = window.document.createElement('a');
+          link.href = document.data;
+          link.download = document.name || 'license-document.pdf';
+          window.document.body.appendChild(link);
+          link.click();
+          window.document.body.removeChild(link);
+        } else {
+          // For SharePoint URLs, open in new tab
+          window.open(src, '_blank');
+        }
+      };
+
+      const handleOpenInSharePoint = () => {
+        window.open(src, '_blank');
+      };
+
+      return React.createElement('div', { 
+        style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }, 
+        onClick: onClose 
+      },
+        React.createElement('div', { 
+          style: { background: 'white', borderRadius: '16px', width: '100%', maxWidth: '900px', height: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }, 
+          onClick: (e) => e.stopPropagation() 
+        },
+          // Header
+          React.createElement('div', { style: { padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderRadius: '16px 16px 0 0' } },
+            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+              React.createElement('span', { style: { fontSize: '24px' } }, '📄'),
+              React.createElement('span', { style: { fontWeight: '600', fontSize: '16px', color: '#111827' } }, document.name || 'License Document')
+            ),
+            React.createElement('div', { style: { display: 'flex', gap: '8px' } },
+              React.createElement('button', { 
+                onClick: handleOpenInSharePoint, 
+                style: { background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' } 
+              }, '🔗 Open in SharePoint'),
+              React.createElement('button', { 
+                onClick: handleDownload, 
+                style: { background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' } 
+              }, '⬇️ Download'),
+              React.createElement('button', { 
+                onClick: onClose, 
+                style: { background: '#f1f5f9', border: 'none', width: '36px', height: '36px', borderRadius: '8px', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' } 
+              }, '✕')
+            )
+          ),
+          // PDF Viewer or SharePoint message
+          isBase64 
+            ? React.createElement('div', { style: { flex: 1, padding: '16px', background: '#374151', overflow: 'hidden' } },
+                React.createElement('iframe', { 
+                  src: src,
+                  style: { width: '100%', height: '100%', border: 'none', borderRadius: '8px', background: 'white' },
+                  title: 'PDF Preview'
+                })
+              )
+            : React.createElement('div', { style: { flex: 1, padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' } },
+                React.createElement('div', { style: { fontSize: '64px', marginBottom: '24px' } }, '📄'),
+                React.createElement('h3', { style: { margin: '0 0 8px', fontSize: '20px', color: '#111827' } }, 'Document stored in SharePoint'),
+                React.createElement('p', { style: { margin: '0 0 24px', color: '#6b7280', textAlign: 'center' } }, 'Click "Open in SharePoint" to view the document in SharePoint\'s viewer'),
+                React.createElement('button', { 
+                  onClick: handleOpenInSharePoint, 
+                  style: { background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '16px' } 
+                }, '🔗 Open Document')
+              )
+        )
+      );
+    };
+
     // ============ LOGIN SCREEN ============
     const LoginScreen = ({ onLogin, loading }) => {
       return React.createElement('div', { style: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' } },
@@ -633,6 +833,7 @@
       const [stateFilter, setStateFilter] = useState('all');
       const [searchTerm, setSearchTerm] = useState('');
       const [sortConfig, setSortConfig] = useState({ key: 'expirationDate', direction: 'asc' });
+      const [previewDocument, setPreviewDocument] = useState(null);
 
       // Check authentication on mount
       useEffect(() => {
@@ -942,7 +1143,7 @@
                             React.createElement('td', { style: { padding: '14px 16px' } }, React.createElement(StatusBadge, { status })),
                             React.createElement('td', { style: { padding: '14px 16px' } },
                               React.createElement('div', { style: { display: 'flex', gap: '8px' } },
-                                license.documents && license.documents.length > 0 && React.createElement('button', { onClick: () => window.open(license.documents[0].data, '_blank'), title: 'View Document', style: { background: '#f3e8ff', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '📄'),
+                                license.documents && license.documents.length > 0 && React.createElement('button', { onClick: () => setPreviewDocument(license.documents[0]), title: 'View Document', style: { background: '#f3e8ff', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '📄'),
                                 React.createElement('button', { onClick: () => { setEditingLicense(license); setShowAddModal(true); }, title: 'Edit', style: { background: '#dbeafe', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '✏️'),
                                 !license.renewed && React.createElement('button', { onClick: () => handleMarkRenewed(license.id), title: 'Mark Renewed', style: { background: '#d1fae5', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '✅'),
                                 React.createElement('button', { onClick: () => handleDeleteLicense(license.id), title: 'Delete', style: { background: '#fee2e2', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' } }, '🗑️')
@@ -974,6 +1175,9 @@
         React.createElement(Modal, { isOpen: showAddModal, onClose: () => { setShowAddModal(false); setEditingLicense(null); }, title: editingLicense ? '✏️ Edit License' : '➕ Add New License', size: 'large' },
           React.createElement(LicenseForm, { license: editingLicense, onSave: handleSaveLicense, onCancel: () => { setShowAddModal(false); setEditingLicense(null); }, saving: saving })
         ),
+
+        // PDF Preview Modal
+        React.createElement(PdfPreviewModal, { isOpen: !!previewDocument, onClose: () => setPreviewDocument(null), document: previewDocument }),
 
         // Footer
         React.createElement('footer', { style: { textAlign: 'center', padding: '24px', color: '#6b7280', fontSize: '13px' } }, '🔒 Data stored in SharePoint')
